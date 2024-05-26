@@ -1,0 +1,104 @@
+version: '3'
+
+networks:
+  svnet:
+
+services:
+  app:
+    container_name: srv1_nginx
+    build:
+      context: ./dockerfiles
+      dockerfile: nginx.dockerfile
+      args:
+        - UID=1000
+        - GID=1000
+    ports:
+      - "80:80"
+    volumes:
+      - ./src:/var/www/html:delegated
+    depends_on:
+      - php
+      - redis
+    networks:
+      - svnet
+  php:
+    container_name: srv1_php
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=1000
+        - GID=1000
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./src:/var/www/html:delegated
+    networks:
+      - svnet
+  mysql:
+    image: mariadb:10.6
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: order_management
+      MYSQL_USER: order_management
+      MYSQL_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: root
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - ./data:/var/lib/mysql
+    networks:
+      - svnet
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    links:
+      - mysql
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    networks:
+      - svnet
+    restart: always
+    ports:
+      - 8081:80
+  rmq:
+    image: rabbitmq:3-management
+    container_name: srv1_rmq
+    volumes:
+      - "./data/log:/data/mnesia"
+    environment:
+    - RABBITMQ_DEFAULT_USER=root
+    - RABBITMQ_DEFAULT_PASS=root
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - svnet
+  redis:
+    container_name: srv1_redis
+    image: redis:alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - svnet
+  composer:
+    container_name: srv1_composer
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=1000
+        - GID=1000
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      - php
+    entrypoint: [ 'composer', '--ignore-platform-reqs' ]
+    networks:
+      - svnet
